@@ -1,0 +1,360 @@
+import customtkinter
+import tkinter
+import logging
+from tkdial import Dial
+from PIL import Image
+from pymodbus.client import ModbusSerialClient as ModbusClient
+from pymodbus.constants import Endian
+from pymodbus.payload import BinaryPayloadDecoder
+from pymodbus import FramerType
+import crcmod
+import pygame
+import serial
+import serial.tools.list_ports
+
+
+
+class LCDFrame(customtkinter.CTkFrame):
+    def __init__(self, master):
+        super().__init__(master)
+        self.configure(fg_color="black")
+        customtkinter.FontManager.load_font("./ressources/digital-7.ttf")
+        customtkinter.FontManager.load_font("./ressources/Sono-Regular.ttf")
+
+        my_image = customtkinter.CTkImage(light_image=Image.open('images/logo_resized.png'),size=(100,13)) # WidthxHeight
+        self.logoLabel = customtkinter.CTkLabel(self, text="", image=my_image, height=13)
+        self.logoLabel.grid(row=0, column=0, padx=10, pady=(10, 0), sticky="SW")
+
+        self.sloganLabel = customtkinter.CTkLabel(self, text="DC power supply",text_color="#737574",font=("Sono-Regular",10), height=10)
+        self.sloganLabel.grid(row=1, column=0, padx=10, pady=(0, 0), sticky="NW")
+
+        self.voltageLabel = customtkinter.CTkLabel(self, text=master.realVoltage, font=("digital-7",40),text_color="white", height=5)
+        self.voltageLabel.grid(row=2, column=0, padx=10, pady=(10, 0), sticky="E")
+        self.vLabel = customtkinter.CTkLabel(self, text="V", font=("Sono-Regular",20),text_color="#737574")
+        self.vLabel.grid(row=2, column=1, padx=10, pady=(10, 0))
+        self.cvLabel = customtkinter.CTkLabel(self, text="C. V", font=("Sono-Regular",8),text_color="black", height = 2)
+        self.cvLabel.grid(row=3, column=1, padx=0, pady=(0, 0))
+
+
+
+        self.currentLabel = customtkinter.CTkLabel(self, text=master.realCurrent, font=("digital-7",40),text_color="white", )
+        self.currentLabel.grid(row=4, column=0, padx=10, pady=(0, 0), sticky="E")
+        self.ALabel = customtkinter.CTkLabel(self, text=" A", font=("Sono-Regular",20),text_color="#737574")
+        self.ALabel.grid(row=4, column=1, padx=10, pady=(5, 5))
+        self.ccLabel = customtkinter.CTkLabel(self, text="C. C", font=("Sono-Regular",8),text_color="black", height = 2)
+        self.ccLabel.grid(row=5, column=1, padx=0, pady=(0, 0))
+        
+        self.powerLabel = customtkinter.CTkLabel(self, text=" OFF", font=("digital-7",40),text_color="white")
+        self.powerLabel.grid(row=6, column=0, padx=10, pady=(0, 0), sticky="E")
+        self.WLabel = customtkinter.CTkLabel(self, text=" W", font=("Sono-Regular",20),text_color="#737574")
+        self.WLabel.grid(row=6, column=1, padx=10, pady=(5, 5))
+
+        self.OCPLabel = customtkinter.CTkLabel(self, text="OCP", font=("Sono-Regular",8),text_color="black", height = 2)
+        self.OCPLabel.grid(row=7, column=0, padx=0, pady=(10, 0), sticky='E')
+        self.OUTLabel = customtkinter.CTkLabel(self, text="OUT", font=("Sono-Regular",8),text_color="black", height = 2,)
+        self.OUTLabel.grid(row=7, column=1, padx=(10,0), pady=(10, 0), sticky='W')
+
+
+class knobFrame(customtkinter.CTkFrame):
+    def __init__(self, master):
+        super().__init__(master)
+        self.configure(fg_color="#23272d")
+        self.voltageKnob = Dial(self,bg="#23272d",start=0, end=32, color_gradient=("grey", "white"), scroll_steps= 0.01,
+             text_color="white", text="V ",unit_width=3, unit_length=5, radius=25,)
+        self.voltageKnob.grid(row=0, column=0, padx=0, pady=10, columnspan=2)
+        
+        self.currentKnob = Dial(self,bg="#23272d",start=0, end=10.2, color_gradient=("grey", "white"),scroll_steps= 0.01,
+             text_color="white", text="A ",unit_width=3, unit_length=5, radius=25)
+        self.currentKnob.grid(row=1, column=0, padx=0, pady=10, columnspan=2)
+        
+        self.ledRx = customtkinter.CTkCanvas(self,width=16, height=16,bg="#23272d",highlightthickness=0, bd=0)
+        self.ledRxCircle = self.ledRx.create_aa_circle(8,8,radius=5,fill="grey20" )
+        self.ledRx.grid(row=2, column=0, padx=0, pady=0,sticky='E')
+        self.RxLabel = customtkinter.CTkLabel(self, text="State", font=("Sono-Regular",10),text_color="#737574", height=5)
+        self.RxLabel.grid(row=2, column=1, padx=10, pady=(0, 0),sticky="W")
+
+
+class buttonsFrame(customtkinter.CTkFrame):
+    def __init__(self, master):
+        super().__init__(master)
+        self.master = master
+        self.configure(fg_color="#23272d")
+        self.buttonMenu = customtkinter.CTkButton(self, text="Menu",text_color="grey40", command=self.open_setup_window, width=25, fg_color="grey10", hover_color="grey25")
+        self.buttonMenu.grid(row=0, column=0, padx=2, pady=10)
+        self.buttonGraph = customtkinter.CTkButton(self, text="Graph",text_color="grey40", command=self.button_callback, width=25, fg_color="grey10", hover_color="grey25")
+        self.buttonGraph.grid(row=0, column=1, padx=2, pady=10)
+        self.buttonLock = customtkinter.CTkButton(self, text="Lock",text_color="grey40", command=self.pushButtonLock, width=25, fg_color="grey10", hover_color="grey25")
+        self.buttonLock.grid(row=0, column=2, padx=2, pady=10)
+        self.buttonOCP = customtkinter.CTkButton(self, text="OCP",text_color="grey40", command=self.pushButtonOCP, width=25, fg_color="grey10", hover_color="grey25")
+        self.buttonOCP.grid(row=0, column=3, padx=2, pady=10)
+        self.buttonOut = customtkinter.CTkButton(self, text="OUT",text_color="grey40", command=self.pushButtonOut, width=25, fg_color="grey10", hover_color="grey25")
+        self.buttonOut.grid(row=0, column=4, padx=2, pady=10)
+        
+
+    def pushButtonOut(self):
+        if self.master.powerOutOn: self.master.powerOutOn = False
+        else: self.master.powerOutOn = True
+        self.master.writeNewData()
+
+    def pushButtonOCP(self):
+        if self.master.OCPOn: self.master.OCPOn = False
+        else: self.master.OCPOn = True
+        self.master.writeNewData()
+
+    def pushButtonLock(self):
+        if self.master.keyboardLocked: self.master.keyboardLocked = False
+        else: self.master.keyboardLocked = True
+        self.master.writeNewData()
+    
+    def open_setup_window(self):
+        self.setup_window = ToplevelWindow(self.master)
+
+    
+    def button_callback(self):
+        print("button pressed")
+
+class PSU():
+        
+        def __init__(self,parent):
+             
+            self.client = ModbusClient( port=parent.serialPort ,framer=FramerType.RTU, baudrate=parent.baudrate, timeout=1, parity="N",)
+            self.client.connect()
+            assert self.client.connected
+            
+        def readData(self, parent):
+            
+            result  = self.client.read_holding_registers(address=0x00, count=8,slave=0x00,).encode()
+            statusBin = "{:08b}".format( int( result[1:2].hex(), 16 ) )
+            if statusBin[-1] == "1": parent.powerOutOn = True
+            else : parent.powerOutOn = False
+            if statusBin[-2] == "1": parent.OCPOn = True
+            else : parent.OCPOn = False
+            if statusBin[-4] == "1": parent.endian = "big"
+            else : parent.endian = "little"
+            if statusBin[-5] == "1": parent.constantCurrent = True
+            else : parent.constantCurrent = False
+            if statusBin[-6] == "1": parent.alarm = True
+            else : parent.alarm = False
+
+            decimalVoltage = 0.01
+            decimalCurrent =0.001
+            voltageBin = "{:08b}".format( int( result[2:3].hex(), 16 ) )
+            currentBin = "{:08b}".format( int( result[3:4].hex(), 16 ) )
+            if voltageBin[0] == 1: decimalVoltage=0.1
+            if currentBin[0] == 1: decimalCurrent=0.01
+
+            parent.realVoltage = round(int.from_bytes(result[5:7], parent.endian)*decimalVoltage,2)
+            parent.realCurrent = round(int.from_bytes(result[7:9], parent.endian)*decimalCurrent,3)
+            
+            parent.maxVoltage  = round(int.from_bytes(result[13:15], parent.endian)*decimalVoltage,2)
+            parent.maxCurrent  = round(int.from_bytes(result[15:17], parent.endian)*decimalCurrent,3)
+
+            if not(parent.keyboardLocked):
+                parent.setVoltage  = round(int.from_bytes(result[9:11], parent.endian)*decimalVoltage,2)
+                parent.setCurrent  = round(int.from_bytes(result[11:13], parent.endian)*decimalCurrent,3)
+            else :
+                if parent.setVoltage != parent.knob_frame.voltageKnob.get():
+                    parent.setVoltage = parent.knob_frame.voltageKnob.get() 
+                    self.writeData(parent)
+                    
+                if parent.setCurrent != parent.knob_frame.currentKnob.get():
+                    parent.setCurrent = parent.knob_frame.currentKnob.get() 
+                    self.writeData(parent)
+                
+        def writeData (self,parent):
+            
+            b= b'\x00\x10\x00\x00\x00\x03\x06'
+            keyboardLocked = parent.keyboardLocked
+            OCPEnabled = parent.OCPOn
+            OutputOn = parent.powerOutOn
+            setVoltage = parent.setVoltage
+            setCurrent = parent.setCurrent
+
+            zero_one_string = "00000"
+            if keyboardLocked : zero_one_string=zero_one_string+"1" 
+            else: zero_one_string=zero_one_string+"0"
+            if OCPEnabled : zero_one_string=zero_one_string+"1" 
+            else: zero_one_string=zero_one_string+"0"
+            if OutputOn : zero_one_string=zero_one_string+"1" 
+            else: zero_one_string=zero_one_string+"0"
+            b=b+ int(zero_one_string, 2).to_bytes((len(zero_one_string) + 7) // 8, 'little')
+            b=b+b"\x00"
+            setVoltage=int(setVoltage*100)
+            b=b+setVoltage.to_bytes(2, 'little')
+            setCurrent=int(setCurrent*1000)
+            b=b+setCurrent.to_bytes(2, 'little')
+
+            crc16 = crcmod.mkCrcFun(0x18005, rev=True, initCrc=0xFFFF, xorOut=0x0000)
+            b=b+crc16(b).to_bytes(2, 'little')
+            
+            s=self.client.send(b)
+
+class ToplevelWindow(customtkinter.CTkToplevel):
+    def __init__(self, master, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.geometry("275x180")
+        self.title('Setup')
+        self.focus()
+        self.grab_set()
+        
+        serial_port = serial.tools.list_ports.comports()
+        portList = []
+        for port in serial_port:
+            portList.append(port.device)
+        deviceAddressList = []
+        for i in range(32):
+            deviceAddressList.append(str(i))
+
+        self.optionmenuDeviceAddress = customtkinter.CTkOptionMenu(self, values=deviceAddressList)
+        self.optionmenuDeviceAddress.grid(row=1, column=1, padx=2, pady=5, sticky='E')
+        self.deviceAddressLabel = customtkinter.CTkLabel(self, text = "Device Address ")
+        self.deviceAddressLabel.grid(row=1, column=0, padx=10, pady=5, sticky='W')
+        self.optionmenuSerialPortNumber = customtkinter.CTkOptionMenu(self, values=portList)
+        self.optionmenuSerialPortNumber.grid(row=2, column=1, padx=2, pady=5, sticky='E')
+        self.SerialPortNumberLabel = customtkinter.CTkLabel(self, text = "Serial Port ")
+        self.SerialPortNumberLabel.grid(row=2, column=0, padx=10, pady=5, sticky='W')
+        self.optionmenuBaudrate = customtkinter.CTkOptionMenu(self, values=['2400', '4800', '9600', '19200'])
+        self.optionmenuBaudrate.grid(row=3, column=1, padx=2, pady=5, sticky='E')
+        self.BaudrateLabel = customtkinter.CTkLabel(self, text = "Baud rate ")
+        self.BaudrateLabel.grid(row=3, column=0, padx=10, pady=5, sticky='W')
+        self.saveButton = customtkinter.CTkButton(self, text="save", command=self.saveSetup)
+        self.saveButton.grid(row=4, column=0, columnspan=2 , padx=10, pady=5)
+
+    def saveSetup(self):
+        self.master.SerialPort = self.optionmenuSerialPortNumber.get()
+        print(self.master.SerialPort)
+        self.master.baudrate = int(self.optionmenuBaudrate.get())
+        print(self.master.baudrate)
+        self.master.deviceAddress = hex(int(self.optionmenuDeviceAddress.get()))
+        print(self.master.deviceAddress)
+        self.destroy()
+
+
+class App(customtkinter.CTk):
+    def __init__(self):
+        super().__init__()
+
+        self.powerOutOn = False
+        self.OCPOn = False
+        self.keyboardLocked = False
+        self.endian = "little"
+        self.constantCurrent = False
+        self.alarm = False
+        self.realVoltage=0
+        self.realCurrent=0
+        self.setVoltage=0
+        self.setCurrent=0
+        self.maxVoltage=0
+        self.maxCurrent=0
+        self.pair=True
+        self.pair2 = True 
+        self.pair3 = True
+        self.serialPort = ""
+        self.baudrate = 2400
+        self.deviceAddress = 0x00
+
+
+        pygame.mixer.init()
+        self.sound = pygame.mixer.Sound('./ressources/censor-beep.wav')
+        
+        self.title("PSU controller")
+        self.configure(fg_color='#23272d')
+        self.wm_iconbitmap('./images/favicon_resized.png')
+        self.iconphoto(False, tkinter.PhotoImage(file='./images/favicon_resized.png'))
+        self.geometry("250x300")
+        self.resizable(0,0)
+        self.grid_columnconfigure(0, weight=1)
+        self.grid_rowconfigure(0, weight=1)
+
+        self.LCD_frame = LCDFrame(self)
+        self.LCD_frame.grid(row=0, column=0, padx=5, pady=(10, 0), sticky="nsw")
+        
+        self.knob_frame = knobFrame(self)
+        self.knob_frame.grid(row=0, column=1, padx=5, pady=(10, 0), sticky="nsw")
+        
+        self.buttons_frame = buttonsFrame(self)
+        self.buttons_frame.grid(row=1, column=0,columnspan=2, padx=5, pady=(10, 0))
+        
+        self.psu = PSU(self) 
+        self.psu.readData(self)
+        
+        
+        
+    
+    def refresh(self):
+        self.psu.readData(self)
+        self.LCD_frame.currentLabel.configure(text_color="White")
+        if self.pair2:
+            self.knob_frame.ledRx.itemconfig(self.knob_frame.ledRxCircle, fill='grey20')
+            self.pair2 = False
+        else :
+            self.knob_frame.ledRx.itemconfig(self.knob_frame.ledRxCircle, fill='green')
+            self.pair2 = True
+
+        if self.powerOutOn: 
+            self.LCD_frame.voltageLabel.configure(text=('%05.2f' % self.realVoltage))
+            self.LCD_frame.currentLabel.configure(text=('%05.3f' % self.realCurrent))
+            self.LCD_frame.powerLabel.configure(text=('%05.1f' % (self.realCurrent * self.realVoltage)))
+            self.buttons_frame.buttonOut.configure(text_color='white')
+            self.LCD_frame.OUTLabel.configure(text_color='green')
+            if self.constantCurrent: 
+                self.LCD_frame.cvLabel.configure(text_color = "black")
+                self.LCD_frame.ccLabel.configure(text_color = "red")
+            else:
+                self.LCD_frame.cvLabel.configure(text_color = "green")
+                self.LCD_frame.ccLabel.configure(text_color = "black")
+        else :
+            self.LCD_frame.cvLabel.configure(text_color = "black")
+            self.LCD_frame.ccLabel.configure(text_color = "black") 
+            self.LCD_frame.voltageLabel.configure(text=('%05.2f' % self.setVoltage))
+            self.LCD_frame.currentLabel.configure(text=('%05.3f' % self.setCurrent))
+            self.LCD_frame.powerLabel.configure(text="OFF")
+            self.buttons_frame.buttonOut.configure( text_color='grey40')
+            self.LCD_frame.OUTLabel.configure(text_color='black')
+        
+        if self.keyboardLocked :
+            self.buttons_frame.buttonLock.configure(text_color='white')
+        else:
+            self.buttons_frame.buttonLock.configure(text_color='grey40')
+        
+        if self.OCPOn: 
+            self.buttons_frame.buttonOCP.configure(text_color='white')
+            self.LCD_frame.OCPLabel.configure(text_color='red')
+        else : 
+            self.buttons_frame.buttonOCP.configure( text_color='grey40')
+            self.LCD_frame.OCPLabel.configure(text_color='black')
+        if self.alarm:
+            self.LCD_frame.voltageLabel.configure(text="----")
+            self.LCD_frame.currentLabel.configure(text="OCP")
+            self.LCD_frame.powerLabel.configure(text="----")
+            self.LCD_frame.cvLabel.configure(text_color = "black")
+            self.LCD_frame.ccLabel.configure(text_color = "black")
+            if self.pair:
+                self.LCD_frame.currentLabel.configure(text_color="White")
+                self.sound.play()
+                self.pair=False
+            else:
+                self.LCD_frame.currentLabel.configure(text_color="Black")
+                self.pair=True
+        self.knob_frame.voltageKnob.set(self.setVoltage)
+        self.knob_frame.currentKnob.set(self.setCurrent)
+        self.after(200, self.refresh)
+    
+    def writeNewData(self):
+        self.psu.writeData(self)
+        #self.knob_frame.ledTx.itemconfig(self.knob_frame.ledTxCircle, fill='blue')
+        #time.sleep(1)
+        #self.knob_frame.ledTx.itemconfig(self.knob_frame.ledTxCircle, fill='yellow')
+        
+    
+FORMAT = ('%(asctime)-15s %(threadName)-15s '
+          '%(levelname)-8s %(module)-15s:%(lineno)-8s %(message)s')
+logging.basicConfig(format=FORMAT)
+log = logging.getLogger()
+log.setLevel(logging.DEBUG)
+
+
+
+app = App()
+app.after(400, app.refresh)
+app.mainloop()
