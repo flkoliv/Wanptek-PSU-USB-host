@@ -2,6 +2,8 @@ import customtkinter
 from PIL import Image
 from tkdial import Dial
 import time
+import matplotlib.pyplot as plt
+import matplotlib.ticker as ticker
 import pickle
 import pygame
 import serial.tools.list_ports
@@ -149,6 +151,7 @@ class ButtonsFrame(customtkinter.CTkFrame):
         print("openSetupWindow")
 
     def openGraphWindow(self):
+        self.parent.open_graph_window()
         print("openGraphWindow")
 
     def pushButtonLock(self):
@@ -170,6 +173,7 @@ class PsuWindow(customtkinter.CTkFrame):
         self.controller = None
         self.pair = False
         self.connected = False
+        self.killed = False
 
         self.configure(fg_color='#23272d')
 
@@ -301,6 +305,85 @@ class PsuWindow(customtkinter.CTkFrame):
                         text="")
                 time.sleep(0.3)
         self.pair = not self.pair
+
+    def open_graph_window(self):
+        plt.figure(num='Wanptek DC Power Supply')
+        thismanager = plt.get_current_fig_manager()
+        # img = tkinter.PhotoImage(file='./images/favicon.png')
+        thismanager.window.wm_iconbitmap('./images/favicon.png')
+        fmt = ticker.FuncFormatter(
+            lambda x, pos: time.strftime('%M:%S', time.gmtime(x)))
+
+        ax1 = plt.subplot(3, 1, 1)
+        ax1.plot(
+            self.controller.model.data_array[:, 0],
+            self.controller.model.data_array[:, 1],
+            'b',
+            label='Voltage (V)')
+        ax1.legend(loc="lower left")
+        ax1.axhline(y=self.controller.model.set_voltage)
+        ax1.xaxis.set_major_formatter(fmt)
+
+        ax2 = plt.subplot(3, 1, 2)
+        ax2.plot(
+            self.controller.model.data_array[:, 0],
+            self.controller.model.data_array[:, 2],
+            'b',
+            label='Current (A)')
+        ax2.legend(loc='lower left')
+        ax2.xaxis.set_major_formatter(fmt)
+
+        ax3 = plt.subplot(3, 1, 3)
+        ax3.plot(
+            self.controller.model.data_array[:, 0],
+            self.controller.model.data_array[:, 3],
+            'b',
+            label='Power (W)')
+        ax3.legend(loc='lower left')
+        ax3.xaxis.set_major_formatter(fmt)
+
+        plt.tight_layout()
+        # Sans cette ligne, il y a des chevauchements dans les étiquettes
+
+        while not self.killed:
+            ax1.clear()
+            ax2.clear()
+            ax3.clear()
+
+            ax1.plot(
+                self.controller.model.data_array[:, 0],
+                self.controller.model.data_array[:, 1],
+                'b',
+                label='Voltage (V)')
+            ax2.plot(
+                self.controller.model.data_array[:, 0],
+                self.controller.model.data_array[:, 2],
+                'g',
+                label='Current (A)')
+            ax3.plot(
+                self.controller.model.data_array[:, 0],
+                self.controller.model.data_array[:, 3],
+                'r',
+                label='Power (W)')
+            ax1.grid()
+            ax2.grid()
+            ax3.grid()
+            ax1.xaxis.set_major_formatter(fmt)
+            ax2.xaxis.set_major_formatter(fmt)
+            ax3.xaxis.set_major_formatter(fmt)
+            ax1.set_ylabel("Voltage (V)")
+            ax2.set_ylabel("Current (A)")
+            ax3.set_ylabel("Power (W)")
+            plt.xlabel("time")
+
+            plt.tight_layout()
+            plt.draw()
+            plt.pause(0.5)
+        plt.close()
+
+    def close_graph_window(self):
+        self.killed = True
+        plt.close()
 
 
 class ToplevelWindow(customtkinter.CTkToplevel):

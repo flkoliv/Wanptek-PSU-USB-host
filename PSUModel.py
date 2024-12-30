@@ -1,4 +1,6 @@
 import pickle
+import time
+import numpy as np
 
 
 class PSUModel:
@@ -19,6 +21,8 @@ class PSUModel:
         self.set_current = 0
         self.max_voltage = 0
         self.max_current = 0
+        self.data_array = np.empty([0, 4])
+        self.time_origin = time.time()
 
         try:
             f = open("./param", "rb")
@@ -28,6 +32,18 @@ class PSUModel:
             f.close()
         except Exception:
             print('no setup file')
+
+    def update_data_array(self):
+        """save last 10 minutes of voltage, current
+           and power datas in a numpy array
+        """
+        if time.time()-self.time_origin > 600:
+            self.data_array = np.delete(self.data_array, 0, 0)
+        self.data_array = np.append(self.data_array, [[
+            time.time()-self.time_origin,
+            self.real_voltage,
+            self.real_current,
+            self.real_voltage*self.real_current]], axis=0)
 
     def update_values(self, output_on, ocp_on, keyboard_locked, endian,
                       constant_current, alarm_triggered, real_voltage,

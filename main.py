@@ -15,19 +15,24 @@ class App(customtkinter.CTk):
         self.iconphoto(False, tkinter.PhotoImage(file='./images/favicon.ico'))
         self.geometry("250x300")
         self.resizable(0, 0)
+        self.protocol("WM_DELETE_WINDOW", self.close_window)
 
         # create a model
-        model = PSUModel.PSUModel()
+        self.model = PSUModel.PSUModel()
 
         # create a view and place it on the root window
-        view = PSUView.PsuWindow(self)
-        view.grid(row=0, column=0, padx=0, pady=0)
+        self.view = PSUView.PsuWindow(self)
+        self.view.grid(row=0, column=0, padx=0, pady=0)
 
         # create a controller
-        controller = PSUController.PSUController(model, view)
+        self.controller = PSUController.PSUController(self.model, self.view)
 
         # set the controller to view
-        view.set_controller(controller)
+        self.view.set_controller(self.controller)
+
+    def close_window(self):
+        self.view.close_graph_window()
+        self.destroy()
 
 
 FORMAT = ('%(asctime)-15s %(threadName)-15s '

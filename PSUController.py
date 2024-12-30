@@ -123,6 +123,7 @@ class PSUController:
                 result[13:15], self.model.endian)*decimal_voltage, 2)
             self.model.max_current = round(int.from_bytes(
                 result[15:17], self.model.endian)*decimal_current, 3)
+            self.model.update_data_array()
             self.connected = True
         except Exception as inst:
             print(inst)
