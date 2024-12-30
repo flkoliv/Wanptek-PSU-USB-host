@@ -10,10 +10,11 @@ class PSUController:
         self.view = view
         self._thread = Thread(target=self.refresh)
         self._thread.daemon = True
-        self.connect()
         self.out_button_pushed = False
         self.ocp_button_pushed = False
         self.lock_button_pushed = False
+        self.connected = False
+        self.connect()
 
     def connect(self):
         try:
@@ -26,49 +27,54 @@ class PSUController:
             self.client.connect()
             self.client.read_holding_registers(
                 address=0x00, count=8, slave=self.model.deviceAddress)
+            self.connected = True
             self._thread.start()
         except Exception:
             print('connection error')
+            self.connected = False
+            self.view.set_disabled()
 
     def refresh(self):
         while True:
-            self.readData()
-            self.view.update_display(
-                self.model.out_on,
-                self.model.ocp_on,
-                self.model.keyboard_locked,
-                self.model.constant_current,
-                self.model.alarm,
-                self.model.real_voltage,
-                self.model.real_current,
-                self.model.set_voltage,
-                self.model.set_current,
-                self.model.max_voltage,
-                self.model.max_current
-            )
-            if self.model.keyboard_locked:
-                if self.model.set_voltage !=\
-                        self.view.knob_frame.voltageKnob.get():
-                    self.model.set_voltage =\
-                        self.view.knob_frame.voltageKnob.get()
+            if self.connected:
+                self.readData()
+                self.view.update_display(
+                    self.connected,
+                    self.model.out_on,
+                    self.model.ocp_on,
+                    self.model.keyboard_locked,
+                    self.model.constant_current,
+                    self.model.alarm,
+                    self.model.real_voltage,
+                    self.model.real_current,
+                    self.model.set_voltage,
+                    self.model.set_current,
+                    self.model.max_voltage,
+                    self.model.max_current
+                )
+                if self.model.keyboard_locked:
+                    if self.model.set_voltage !=\
+                            self.view.knob_frame.voltageKnob.get():
+                        self.model.set_voltage =\
+                            self.view.knob_frame.voltageKnob.get()
+                        self.writeData()
+                    if self.model.set_current !=\
+                            self.view.knob_frame.currentKnob.get():
+                        self.model.set_current =\
+                            self.view.knob_frame.currentKnob.get()
+                        self.writeData()
+                if self.out_button_pushed:
+                    self.model.out_on = not self.model.out_on
                     self.writeData()
-                if self.model.set_current !=\
-                        self.view.knob_frame.currentKnob.get():
-                    self.model.set_current =\
-                        self.view.knob_frame.currentKnob.get()
+                    self.out_button_pushed = False
+                if self.ocp_button_pushed:
+                    self.model.ocp_on = not self.model.ocp_on
                     self.writeData()
-            if self.out_button_pushed:
-                self.model.out_on = not self.model.out_on
-                self.writeData()
-                self.out_button_pushed = False
-            if self.ocp_button_pushed:
-                self.model.ocp_on = not self.model.ocp_on
-                self.writeData()
-                self.ocp_button_pushed = False
-            if self.lock_button_pushed:
-                self.model.keyboard_locked = not self.model.keyboard_locked
-                self.writeData()
-                self.lock_button_pushed = False
+                    self.ocp_button_pushed = False
+                if self.lock_button_pushed:
+                    self.model.keyboard_locked = not self.model.keyboard_locked
+                    self.writeData()
+                    self.lock_button_pushed = False
 
     def readData(self):
         try:
@@ -117,8 +123,10 @@ class PSUController:
                 result[13:15], self.model.endian)*decimal_voltage, 2)
             self.model.max_current = round(int.from_bytes(
                 result[15:17], self.model.endian)*decimal_current, 3)
+            self.connected = True
         except Exception as inst:
             print(inst)
+            self.connected = False
 
     def writeData(self):
         try:

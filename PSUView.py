@@ -2,7 +2,9 @@ import customtkinter
 from PIL import Image
 from tkdial import Dial
 import time
+import pickle
 import pygame
+import serial.tools.list_ports
 
 
 class LCDFrame(customtkinter.CTkFrame):
@@ -143,6 +145,7 @@ class ButtonsFrame(customtkinter.CTkFrame):
         self.buttonOut.grid(row=0, column=4, padx=2, pady=10)
 
     def openSetupWindow(self):
+        self.setup_window = ToplevelWindow(self.parent.controller)
         print("openSetupWindow")
 
     def openGraphWindow(self):
@@ -166,6 +169,7 @@ class PsuWindow(customtkinter.CTkFrame):
         super().__init__(parent)
         self.controller = None
         self.pair = False
+        self.connected = False
 
         self.configure(fg_color='#23272d')
 
@@ -198,7 +202,26 @@ class PsuWindow(customtkinter.CTkFrame):
     def set_controller(self, controller):
         self.controller = controller
 
+    def set_disabled(self):
+        self.LCD_frame.voltageLabel.configure(text_color="black")
+        self.LCD_frame.currentLabel.configure(text_color="black")
+        self.LCD_frame.powerLabel.configure(text_color="black")
+        self.knob_frame.ledRx.itemconfig(self.knob_frame.ledRxCircle,
+                                         fill='red')
+
+    def set_enabled(self):
+        self.LCD_frame.voltageLabel.configure(text_color="white")
+        self.LCD_frame.currentLabel.configure(text_color="white")
+        self.LCD_frame.powerLabel.configure(text_color="white")
+        if self.pair:
+            self.knob_frame.ledRx.itemconfig(self.knob_frame.ledRxCircle,
+                                             fill='green')
+        else:
+            self.knob_frame.ledRx.itemconfig(self.knob_frame.ledRxCircle,
+                                             fill='gray20')
+
     def update_display(self,
+                       connected,
                        out_on,
                        ocp_on,
                        keyboard_locked,
@@ -210,7 +233,10 @@ class PsuWindow(customtkinter.CTkFrame):
                        set_current,
                        max_voltage,
                        max_current):
-
+        if connected:
+            self.set_enabled()
+        else:
+            self.set_disabled()
         self.knob_frame.voltageKnob.configure(end=max_voltage)
         self.knob_frame.currentKnob.configure(end=max_current)
         if not keyboard_locked:
@@ -274,4 +300,72 @@ class PsuWindow(customtkinter.CTkFrame):
                 self.LCD_frame.currentLabel.configure(
                         text="")
                 time.sleep(0.3)
-            self.pair = not self.pair
+        self.pair = not self.pair
+
+
+class ToplevelWindow(customtkinter.CTkToplevel):
+    def __init__(self, controller, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.controller = controller
+        self.geometry("275x180")
+        self.title('Setup')
+        self.focus()
+        self.grab_set()
+        serial_port = serial.tools.list_ports.comports()
+        portList = []
+        for port in serial_port:
+            portList.append(port.device)
+        deviceAddressList = []
+        for i in range(32):
+            deviceAddressList.append(str(i))
+
+        self.optionmenuDeviceAddress = customtkinter.CTkOptionMenu(
+            self, values=deviceAddressList)
+        self.optionmenuDeviceAddress.grid(
+            row=1, column=1, padx=2, pady=5, sticky='E')
+        self.deviceAddressLabel = customtkinter.CTkLabel(
+            self, text="Device Address ")
+        self.deviceAddressLabel.grid(
+            row=1, column=0, padx=10, pady=5, sticky='W')
+        self.optionmenuSerialPortNumber = customtkinter.CTkOptionMenu(
+            self, values=portList)
+        self.optionmenuSerialPortNumber.grid(
+            row=2, column=1, padx=2, pady=5, sticky='E')
+        self.SerialPortNumberLabel = customtkinter.CTkLabel(
+            self, text="Serial Port ")
+        self.SerialPortNumberLabel.grid(
+            row=2, column=0, padx=10, pady=5, sticky='W')
+        self.optionmenuBaudrate = customtkinter.CTkOptionMenu(
+            self, values=['2400', '4800', '9600', '19200'])
+        self.optionmenuBaudrate.grid(
+            row=3, column=1, padx=2, pady=5, sticky='E')
+        self.BaudrateLabel = customtkinter.CTkLabel(self, text="Baud rate ")
+        self.BaudrateLabel.grid(row=3, column=0, padx=10, pady=5, sticky='W')
+        self.saveButton = customtkinter.CTkButton(
+            self, text="save", command=self.saveSetup)
+        self.saveButton.grid(row=4, column=0, columnspan=2, padx=10, pady=5)
+        try:
+            self.optionmenuDeviceAddress.set(controller.model.deviceAddress)
+            self.optionmenuSerialPortNumber.set(controller.model.serialPort)
+            self.optionmenuBaudrate.set(controller.model.baudrate)
+        except Exception:
+            pass
+
+    def saveSetup(self):
+        self.controller.model.serialPort =\
+            self.optionmenuSerialPortNumber.get()
+        self.controller.model.baudrate =\
+            int(self.optionmenuBaudrate.get())
+        self.controller.model.deviceAddress =\
+            int(self.optionmenuDeviceAddress.get())
+        f = open("./param", "wb")
+        pickle.dump(self.controller.model.serialPort, f)
+        pickle.dump(self.controller.model.baudrate, f)
+        pickle.dump(self.controller.model.deviceAddress, f)
+        f.close()
+        self.destroy()
+        try:
+            self.controller.client.close()
+        except Exception:
+            pass
+        self.controller.connect()
