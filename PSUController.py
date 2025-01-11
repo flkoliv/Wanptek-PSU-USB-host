@@ -29,8 +29,9 @@ class PSUController:
                 address=0x00, count=8, slave=self.model.deviceAddress)
             self.connected = True
             self._thread.start()
-        except Exception:
+        except Exception as ex:
             print('connection error')
+            print(ex)
             self.connected = False
             self.view.set_disabled()
 
