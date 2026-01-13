@@ -4,15 +4,24 @@ import PSUModel
 import PSUView
 import PSUController
 import logging
+import os
 
+import ctypes
+
+# Identifiant unique pour votre application (format: 'ma_compagnie.mon_app.version')
+myappid = 'monentreprise.psu_controller.1.0' 
+if os.name == 'nt':ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(myappid)
 
 class App(customtkinter.CTk):
     def __init__(self):
         super().__init__()
         self.title("PSU controller")
         self.configure(fg_color='#23272d')
-        self.wm_iconbitmap('./images/favicon.ico')
-        self.iconphoto(False, tkinter.PhotoImage(file='./images/favicon.ico'))
+        #self.wm_iconbitmap('./images/wanptek.ico')
+        #self.iconphoto(True, tkinter.PhotoImage(file='./images/favicon.png'))
+        ico = tkinter.PhotoImage(file="./images/favicon.png")
+        self.iconphoto(True, ico)
+        self._root().iconbitmap("./images/wanptek.ico")
         self.geometry("250x300")
         self.resizable(0, 0)
         self.protocol("WM_DELETE_WINDOW", self.close_window)
